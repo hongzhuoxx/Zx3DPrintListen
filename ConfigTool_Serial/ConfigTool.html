@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>串口通讯测试</title>
+
+  <style type="text/css">
+    .btnsize {
+      width: 513px;
+      height: 50px;
+      margin: 10px 0 10px 0;
+    }
+
+    .inputsize {
+      width: 250px;
+      height: 50px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div style="border: groove; margin: 10px;">
+    <button type="button" id="butConnect" class="btnsize">连接串口</button>
+    <span style="padding: 1%"></span>
+    <button type="button" id="butClose" class="btnsize">关闭串口</button>
+  </div>
+  <div style="border: groove; margin: 10px;text-align: center;color: red;">
+    <h3>如果需要邮件通知，请优先设置关于Email的项目，然后再设置其它项目！</h3>
+    <h3>！！！暂时不支持中文！！！</h3>
+  </div>
+  <div style="border: groove; margin: 10px;">
+    <select id="st_cmd" class="inputsize">
+      <option value="#seh#">Email SMTP 主机地址(例如 smtp.163.com)</option>
+      <option value="#sep#">Email SMTP 主机端口(例如 25)</option>
+      <option value="#sea#">Email SMTP 账户</option>
+      <option value="#sew#">Email SMTP 密码</option>
+      <option value="#set#">设置 Email 接收地址</option>
+
+      <option value="#stl#">显示标题</option>
+      <option value="#sss#">WIFI名称</option>
+      <option value="#spw#">WIFI密码</option>
+      <option value="#sip#">3D打印机(OctoServer)IP</option>
+      <option value="#stk#">(OctoServer)访问令牌</option>
+      <option value="#ccc#">删除所有配置</option>
+    </select>
+    <input id="sendData" class="inputsize" type="text" value="">
+    <div>
+      <button type="button" id="butSend" class="btnsize">设置参数(每设置一个参数串口都会断开一次,需要手动从新连接)</button>
+    </div>
+  </div>
+
+  <div style="border: groove; margin: 10px;">
+    <select id="st_color" class="inputsize">
+      <option value="#sbg#">设置背景色</option>
+      <option value="#sfg#">设置前景色</option>
+    </select>
+    <select id="st_colorValue" class="inputsize">
+      <option value="0x0000">黑色 </option>
+      <option value="0x000f">海军 </option>
+      <option value="0x03e0">深绿色 </option>
+      <option value="0x03ef">暗青色 </option>
+      <option value="0x7800">栗色 </option>
+      <option value="0x780f">紫色 </option>
+      <option value="0x7be0">橄榄 </option>
+      <option value="0xd69a">浅灰色 </option>
+      <option value="0x7bef">深灰色 </option>
+      <option value="0x001f">蓝色 </option>
+      <option value="0x07e0">绿色 </option>
+      <option value="0x07ff">青色 </option>
+      <option value="0xf800">红 </option>
+      <option value="0xf81f">洋红色 </option>
+      <option value="0xffe0">黄色 </option>
+      <option value="0xffff">白色 </option>
+      <option value="0xfda0">橙色 </option>
+      <option value="0xb7e0">绿色黄色</option>
+      <option value="0xfe19">粉色 </option>
+      <option value="0x9a60">布朗 </option>
+      <option value="0xfea0">黄金 </option>
+      <option value="0xc618">银 </option>
+      <option value="0x867d">天蓝色 </option>
+      <option value="0x915c">紫 </option>
+    </select>
+
+    <div>
+      <button type="button" id="btnSetColor" class="btnsize">设置颜色(每设置一个参数串口都会断开一次,并且点击按钮后需要等待7秒左右)</button>
+    </div>
+  </div>
+
+  <div style="margin: 10px">接收的数据:</div>
+  <div style="border: groove; margin: 10px; height: 500px;padding: 10px;">
+    <textarea id="receivedList" style="height: 100%;width: 100%;"></textarea>
+  </div>
+  
+
+  <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.js"></script>
+  <script>
+    // 串口对象
+    var port;
+    // 读取串口
+    let reader;
+    // 写入串口
+    let writer;
+
+    $(function () {
+
+      $("#butConnect").click(function () {
+        OpenPort();
+      });
+
+      $("#butClose").click(function () {
+        ClosePort();
+      });
+
+      $("#butSend").click(async function () {
+        var xdata = stringToArrayBuffer($("#st_cmd").val() + $("#sendData").val());
+        var rData = await SendMsgAndReceivedData(xdata);
+        $("#receivedList").val(rData);
+      });
+
+      $("#btnSetColor").click(async function () {
+        var xdata = stringToArrayBuffer($("#st_color").val() + $("#st_colorValue").val());
+        var rData = await SendMsgAndReceivedData(xdata);
+        $("#receivedList").val(rData);
+      });
+
+    });
+
+    // 发送并接受数据
+    async function SendMsgAndReceivedData(msg) {
+      await writer.write(msg);
+
+      while (port.readable) {
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+
+            if (done) {
+              // Allow the serial port to be closed later.
+              reader.releaseLock();
+              // Allow the serial port to be closed later.
+              writer.releaseLock();
+              break;
+            }
+
+            if (value) {
+              //dataList.innerHTML += Uint8ArrayToString(value);
+              return Uint8ArrayToString(value);
+            }
+          }
+        } catch (error) {
+          // Handle non-fatal read error.
+          console.error(error);
+        } finally {
+          console.log(port.readable);
+        }
+      }
+    }
+
+    // 打开串口
+    async function OpenPort() {
+
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+        reader = port.readable.getReader();
+        writer = port.writable.getWriter();
+
+        alert("串口已打开");
+      } catch (error) {
+        alert("串口打开出错:" + error);
+      }
+    }
+
+    // 关闭串口
+    async function ClosePort() {
+      try {
+        reader.releaseLock();
+        writer.releaseLock();
+        // reader.cancel();
+        // writer.cancel();
+        port.close();
+        console.log("port closed");
+        alert("串口已关闭");
+      } catch (error) {
+        alert("串口关闭出错:" + error);
+      }
+
+    }
+
+    // Uint8Array转字符串
+    function Uint8ArrayToString(fileData) {
+      var dataString = "";
+      for (var i = 0; i < fileData.length; i++) {
+        dataString += String.fromCharCode(fileData[i]);
+      }
+
+      return dataString
+
+    }
+
+    // 字符串转ArrayBuffer
+    function stringToArrayBuffer(str) {
+      var bytes = new Array();
+      var len, c;
+      len = str.length;
+      for (var i = 0; i < len; i++) {
+        c = str.charCodeAt(i);
+        if (c >= 0x010000 && c <= 0x10FFFF) {
+          bytes.push(((c >> 18) & 0x07) | 0xF0);
+          bytes.push(((c >> 12) & 0x3F) | 0x80);
+          bytes.push(((c >> 6) & 0x3F) | 0x80);
+          bytes.push((c & 0x3F) | 0x80);
+        } else if (c >= 0x000800 && c <= 0x00FFFF) {
+          bytes.push(((c >> 12) & 0x0F) | 0xE0);
+          bytes.push(((c >> 6) & 0x3F) | 0x80);
+          bytes.push((c & 0x3F) | 0x80);
+        } else if (c >= 0x000080 && c <= 0x0007FF) {
+          bytes.push(((c >> 6) & 0x1F) | 0xC0);
+          bytes.push((c & 0x3F) | 0x80);
+        } else {
+          bytes.push(c & 0xFF);
+        }
+      }
+      var array = new Int8Array(bytes.length);
+      for (var i = 0; i <= bytes.length; i++) {
+        array[i] = bytes[i];
+      }
+      return array.buffer;
+    }
+
+  </script>
+</body>
+
+</html>
