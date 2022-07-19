@@ -10,6 +10,10 @@
 #include <ArduinoJson.h>
 #include <ESP_Mail_Client.h>
 
+// 监测电量的ADC
+#define adc3 1
+
+
 // https://github.com/dojyorin/arduino_base64
 // Base64_Codec
 #include "base64.hpp"
@@ -69,8 +73,15 @@ bool Notice_completion25 = false;
 bool Notice_completion50 = false;
 bool Notice_completion75 = false;
 bool Notice_completion100 = false;
+// --------任务状态
+String JobState = "";
+// --------监视工具电量低
+bool Notice_powerlow = false;
 // ------------------------------------------------------------------------
-
+// --------ADC
+// 用于监测电池电量的adc值
+uint16_t adc_Value = 0;
+String str_bat = "";
 
 // 启动
 void setup() {
@@ -80,14 +91,14 @@ void setup() {
   HWSerial.setDebugOutput(true);
   USBSerial.begin();
   USB.begin();
-  
+
   // 背光引脚初始化
   pinMode(45, OUTPUT);
   digitalWrite(45, HIGH);
 
 
-//===============================================
-//===============================================
+  //===============================================
+  //===============================================
 
   // tft初始化
   tft.init();
@@ -106,6 +117,32 @@ void setup() {
 
 // 循环
 void loop() {
+  // 获取ADC数据
+  adc_Value = analogRead(adc3);
+  // 通过ADC计算电压
+  double v = (adc_Value / 8191.0 * 3.3 - 0.34) * 3;
+
+  // 计算电池剩余电量
+  if (4.2 - v <= 0) {
+    // 100%电量
+    str_bat = "100";
+    USBSerial.printf("E:100%");
+    USBSerial.println("");
+  } else
+  {
+    double e = (1.2 - (4.2 - v)) / 1.2 * 100;
+    str_bat = String(e, 0);
+    USBSerial.println(str_bat.c_str());
+    USBSerial.println("");
+
+    // 小工具电量低提醒
+    if (e < 10 && !Notice_powerlow) {
+      Notice_powerlow = true;
+      USBSerial.println("powerlow");
+      SendEmail("3D打印机监视小工具的电量已经低于10%", "");
+    }
+  }
+
   // 循环接受串口数据
   while (USBSerial.available() > 0) {
     char ch = USBSerial.read();
@@ -207,7 +244,6 @@ void loop() {
         //USBSerial.println(testData);
         SendEmail("测试发送邮件", testData);
       }
-
     }
 
     // 完成本次处理
@@ -225,51 +261,51 @@ void loop() {
 //将字符串("0xffff")的内容转换为 16进制
 unsigned int hex_conver_dec(char *src)
 {
-    char *tmp = src;
-    int len = 0;
-    unsigned int hexad = 0;
-    char sub = 0;
+  char *tmp = src;
+  int len = 0;
+  unsigned int hexad = 0;
+  char sub = 0;
 
-    while (1)
+  while (1)
+  {
+    if (*tmp == '0')            //去除字符串 首位0
     {
-        if (*tmp == '0')            //去除字符串 首位0
-        {
-            tmp++;
-            continue;
-        }           
-        else if (*tmp == 'X')
-        {
-            tmp++;
-            continue;
-        }
-        else if (*tmp == 'x')
-        {
-            tmp++;
-            continue;
-        }
-        else
-            break;
+      tmp++;
+      continue;
     }
-
-    len = strlen(tmp);
-    for (len; len > 0; len--)
-    {        
-        sub = toupper(*tmp++) - '0';
-        if (sub > 9)
-            sub -= 7;
-        hexad += sub * power(16, len - 1);      
+    else if (*tmp == 'X')
+    {
+      tmp++;
+      continue;
     }
+    else if (*tmp == 'x')
+    {
+      tmp++;
+      continue;
+    }
+    else
+      break;
+  }
 
-    return hexad;
+  len = strlen(tmp);
+  for (len; len > 0; len--)
+  {
+    sub = toupper(*tmp++) - '0';
+    if (sub > 9)
+      sub -= 7;
+    hexad += sub * power(16, len - 1);
+  }
+
+  return hexad;
 }
 
 //获取x的y次方; x^y
 unsigned int power(int x, int y)
 {
-    unsigned int result = 1;
-    while (y--)
-        result *= x;
-    return result;
+  unsigned int result = 1;
+  while (y--)
+    result *= x;
+  return result;
 }
 
 // 设置配置项目
@@ -310,7 +346,7 @@ bool CheckConfig() {
   Preferences prefs;
   prefs.begin(myNamespace.c_str());
 
-  if (prefs.isKey("TFT_BGColor")) { 
+  if (prefs.isKey("TFT_BGColor")) {
     TFT_BGColor = hex_conver_dec((char *)prefs.getString("TFT_BGColor").c_str());
   }
   if (prefs.isKey("TFT_FGColor")) {
@@ -462,10 +498,17 @@ void PrintStateListen() {
         ShowPrintState(rstate, rprogress, jname);
       }
     } else {
-      SetTFT_Text(TFT_FGColor, 5, 10, 1.5, "3DPrint Offline");
+      //SetTFT_Text(TFT_FGColor, 5, 10, 1.5, "3DPrint Offline");
       //USBSerial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+      // 离线状态
+      ResetTFT(TFT_FGColor, 0, 0, 1);
+      tft.println("   ---------> BAT[" + str_bat + "%]");
+      tft.println("   " + title);
+      tft.println("   ----------------");
+      tft.println("   3DPrint Offline");
+      tft.println("   =====================");
     }
-    // 结束http
+    // 接触http
     http.end();
   }
   // 设置延迟
@@ -519,94 +562,103 @@ void ShowPrintState(String msg, String progress, String jobname)
     Notice_completion100 = false;
     NowJobName = jobname;
   }
- 
-  if (fpcc >= 0 && fpcc < 5 && (!Notice_startState) && jobname!=NULL) {
+
+  if (fpcc >= 0 && fpcc < 5 && (!Notice_startState) && jobname != NULL && jobname != "" && jobname != "null") {
     Notice_startState = true;
     USBSerial.println("start");
     String testData =  GetPrintCamBase64Img();
-    SendEmail("3D打印机已经开始新的工作,当前打印任务：" + jobname + ".", testData);
+    SendEmail("3D打印机已经开始新的工作,当前打印任务：" + jobname + "。", testData);
   }
 
   if (fpcc >= 25 && fpcc < 30 && (!Notice_completion25)) {
     Notice_completion25 = true;
     USBSerial.println("completion 25");
     String testData =  GetPrintCamBase64Img();
-    SendEmail("3D打印机当前打印进度已过25%,当前打印任务：" + jobname + ".", testData);
+    SendEmail("3D打印机当前打印进度已过25%,当前打印任务：" + jobname + "。", testData);
   }
 
   if (fpcc >= 50 && fpcc < 55 && (!Notice_completion50)) {
     Notice_completion50 = true;
     USBSerial.println("completion 50");
     String testData =  GetPrintCamBase64Img();
-    SendEmail("3D打印机当前打印进度已过50%,当前打印任务：" + jobname + ".", testData);
+    SendEmail("3D打印机当前打印进度已过50%,当前打印任务：" + jobname + "。", testData);
   }
 
   if (fpcc >= 75 && fpcc < 80 && (!Notice_completion75)) {
     Notice_completion75 = true;
     USBSerial.println("completion 75");
     String testData =  GetPrintCamBase64Img();
-    SendEmail("3D打印机当前打印进度已过75%,当前打印任务：" + jobname + ".", testData);
+    SendEmail("3D打印机当前打印进度已过75%,当前打印任务：" + jobname + "。", testData);
   }
 
   if (fpcc >= 100 && (!Notice_completion100)) {
     Notice_completion100 = true;
     USBSerial.println("completion 100");
     String testData =  GetPrintCamBase64Img();
-    SendEmail("3D打印机已完成打印工作100%,当前打印任务：" + jobname + ".", testData);
+    SendEmail("3D打印机已完成打印工作100%,当前打印任务：" + jobname + "。", testData);
   }
 
+  if (!JobState.equals(jobname + msg_l)) {
+    // 拼接任务状态-处理其他状态
+    JobState = jobname + msg_l;
+
+    if (!msg_l.equals("printing") && !msg_l.equals("operational")) {
+      String testData =  GetPrintCamBase64Img();
+      SendEmail("3D打印机已更新状态。任务：" + jobname + "。状态:" + msg, testData);
+    }
+  }
   //==================================================================
 
   // 完成任务
   if (msg_l.equals("operational") && fpcc >= 100) {
     ResetTFT(TFT_FGColor, 0, 0, 1);
-    tft.println("   ---------------->");
+    tft.println("   ---------> BAT[" + str_bat + "%]");
     tft.println("   " + title);
     tft.println("   " + msg);
     tft.println("   3DPrint Finish");
-    tft.println("   ---------------->");
+    tft.println("   =====================");
     return;
   }
 
   // 没有任务
   if (msg_l.equals("operational") && fpcc <= 0) {
     ResetTFT(TFT_FGColor, 0, 0, 1);
-    tft.println("   ---------------->");
+    tft.println("   ---------> BAT[" + str_bat + "%]");
     tft.println("   " + title);
     tft.println("   " + msg);
     tft.println("   No Job");
-    tft.println("   ---------------->");
+    tft.println("   =====================");
     return;
   }
 
   // 打印中
   if (msg_l.equals("printing")) {
     ResetTFT(TFT_FGColor, 0, 0, 1);
-    tft.println("   ---------------->");
+    tft.println("   ---------> BAT[" + str_bat + "%]");
     tft.println("   " + title);
     tft.println("   " + msg);
     tft.println("   Progress " + progress + "%");
-    tft.println("   ---------------->");
+    tft.println("   =====================");
     return;
   }
 
   // 打印中
   if (msg_l.equals("printing from sd")) {
     ResetTFT(TFT_FGColor, 0, 0, 1);
-    tft.println("   ---------------->");
+    tft.println("   ---------> BAT[" + str_bat + "%]");
     tft.println("   " + title);
     tft.println("   " + msg);
     tft.println("   Progress " + progress + "%");
-    tft.println("   ---------------->");
+    tft.println("   =====================");
     return;
   }
 
   // 其他状态
   ResetTFT(TFT_FGColor, 0, 0, 1);
-  tft.println("   ---------------->");
+  tft.println("   ---------> BAT[" + str_bat + "%]");
   tft.println("   " + title);
   tft.println("   " + msg);
-  tft.println("   ---------------->");
+  tft.println("   =====================");
 }
 
 // 显示数据消息
