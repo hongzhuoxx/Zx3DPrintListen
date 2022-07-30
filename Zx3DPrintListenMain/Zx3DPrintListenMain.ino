@@ -139,7 +139,7 @@ void loop() {
     if (e < 10 && !Notice_powerlow) {
       Notice_powerlow = true;
       USBSerial.println("powerlow");
-      SendEmail("3D打印机监视小工具的电量已经低于10%", "");
+      SendEmail("监测小工具状态报告-电量低", "3D打印机监视小工具的电量已经低于10%", "");
     }
   }
 
@@ -227,22 +227,22 @@ void loop() {
     {
       //=========================================
       //======TEST
-      ssid = "xxx";
-      pwd = "xxx";
-      printip = "xxx";
-      emailhost = "xxx";
-      emailport = "25";
-      emailaccount = "xxx";
-      emailpwd = "xxx";
-      emailtag = "xxx";
-      token = "xxx";
+      //      ssid = "xxx";
+      //      pwd = "xxx";
+      //      printip = "xxx";
+      //      emailhost = "xxx";
+      //      emailport = "25";
+      //      emailaccount = "xxx";
+      //      emailpwd = "xxx";
+      //      emailtag = "xxx";
+      //      token = "xxx";
       //=========================================
 
       wifiMulti.addAP(ssid.c_str(), pwd.c_str());
       if ((wifiMulti.run() == WL_CONNECTED)) {
         String testData =  GetPrintCamBase64Img();
         //USBSerial.println(testData);
-        SendEmail("测试发送邮件", testData);
+        SendEmail("3D打印机状态报告-测试", "测试发送邮件", testData);
       }
     }
 
@@ -567,35 +567,35 @@ void ShowPrintState(String msg, String progress, String jobname)
     Notice_startState = true;
     USBSerial.println("start");
     String testData =  GetPrintCamBase64Img();
-    SendEmail("3D打印机已经开始新的工作,当前打印任务：" + jobname + "。", testData);
+    SendEmail("3D打印机工作-开始新任务", "3D打印机已经开始新的工作,当前打印任务：" + jobname + "。", testData);
   }
 
   if (fpcc >= 25 && fpcc < 30 && (!Notice_completion25)) {
     Notice_completion25 = true;
     USBSerial.println("completion 25");
     String testData =  GetPrintCamBase64Img();
-    SendEmail("3D打印机当前打印进度已过25%,当前打印任务：" + jobname + "。", testData);
+    SendEmail("3D打印机工作-进度25%", "3D打印机当前打印进度已过25%,当前打印任务：" + jobname + "。", testData);
   }
 
   if (fpcc >= 50 && fpcc < 55 && (!Notice_completion50)) {
     Notice_completion50 = true;
     USBSerial.println("completion 50");
     String testData =  GetPrintCamBase64Img();
-    SendEmail("3D打印机当前打印进度已过50%,当前打印任务：" + jobname + "。", testData);
+    SendEmail("3D打印机工作-进度50%", "3D打印机当前打印进度已过50%,当前打印任务：" + jobname + "。", testData);
   }
 
   if (fpcc >= 75 && fpcc < 80 && (!Notice_completion75)) {
     Notice_completion75 = true;
     USBSerial.println("completion 75");
     String testData =  GetPrintCamBase64Img();
-    SendEmail("3D打印机当前打印进度已过75%,当前打印任务：" + jobname + "。", testData);
+    SendEmail("3D打印机工作-进度75%", "3D打印机当前打印进度已过75%,当前打印任务：" + jobname + "。", testData);
   }
 
   if (fpcc >= 100 && (!Notice_completion100)) {
     Notice_completion100 = true;
     USBSerial.println("completion 100");
     String testData =  GetPrintCamBase64Img();
-    SendEmail("3D打印机已完成打印工作100%,当前打印任务：" + jobname + "。", testData);
+    SendEmail("3D打印机工作-已完成", "3D打印机已完成打印工作100%,当前打印任务：" + jobname + "。", testData);
   }
 
   if (!JobState.equals(jobname + msg_l)) {
@@ -604,7 +604,7 @@ void ShowPrintState(String msg, String progress, String jobname)
 
     if (!msg_l.equals("printing") && !msg_l.equals("operational")) {
       String testData =  GetPrintCamBase64Img();
-      SendEmail("3D打印机已更新状态。任务：" + jobname + "。状态:" + msg, testData);
+      SendEmail("3D打印机状态报告-" + msg , "3D打印机已更新状态。任务：" + jobname + "。状态:" + msg, testData);
     }
   }
   //==================================================================
@@ -771,7 +771,7 @@ void ResetTFT(int color, int x, int y, int fsize)
 }
 
 // 发送Email
-void SendEmail(String emailText, String imgData) {
+void SendEmail(String emailTitle, String emailText, String imgData) {
   USBSerial.println("email start");
   //================================================================================================
 
@@ -785,9 +785,9 @@ void SendEmail(String emailText, String imgData) {
   SMTP_Message message;
 
   // Set the message headers
-  message.sender.name = "3D打印机状态报告";
+  message.sender.name = emailTitle;
   message.sender.email = emailaccount;
-  message.subject = "3D打印机状态报告";
+  message.subject = emailTitle;
   message.addRecipient(emailtag, emailtag);
 
   //================================================================================================
