@@ -92,7 +92,7 @@
   <div style="border: groove; margin: 10px; height: 500px;padding: 10px;">
     <textarea id="receivedList" style="height: 100%;width: 100%;"></textarea>
   </div>
-  
+
 
   <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.js"></script>
   <script>
@@ -129,6 +129,7 @@
 
     // 发送并接受数据
     async function SendMsgAndReceivedData(msg) {
+      var recData = '';
       await writer.write(msg);
 
       while (port.readable) {
@@ -146,7 +147,7 @@
 
             if (value) {
               //dataList.innerHTML += Uint8ArrayToString(value);
-              return Uint8ArrayToString(value);
+              recData = recData + Uint8ArrayToString(value);
             }
           }
         } catch (error) {
@@ -156,6 +157,7 @@
           console.log(port.readable);
         }
       }
+      return recData;
     }
 
     // 打开串口
